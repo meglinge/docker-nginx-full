@@ -40,7 +40,6 @@ The following images are built:
 The following architectures are supported for all images:
 
 - amd64
-- arm/v7
 - arm64
 
 ### Usage:

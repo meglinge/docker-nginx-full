@@ -7,7 +7,7 @@ GREEN='\E[1;32m'
 RESET='\E[0m'
 
 DOCKER_IMAGE="${REGISTRY:-}nginxproxymanager/nginx-full"
-PLATFORMS=linux/amd64,linux/arm64,linux/arm/7
+PLATFORMS=linux/amd64,linux/arm64
 
 export OPENRESTY_VERSION=1.27.1.2
 export CROWDSEC_OPENRESTY_BOUNCER_VERSION=0.1.7
