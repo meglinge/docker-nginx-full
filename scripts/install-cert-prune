@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-# Note: This script is designed to be run inside a Docker Build for a container
+# 注：这个脚本只用于 Docker 构建阶段安装 cert-prune。
 
 CYAN='\E[1;36m'
 YELLOW='\E[1;33m'
@@ -8,27 +8,43 @@ BLUE='\E[1;34m'
 GREEN='\E[1;32m'
 RESET='\E[0m'
 
-CERT_PRUNE_VERSION=0.0.1
+CERT_PRUNE_VERSION=v0.0.0-20230515051954-ab01c6e0bab5
 TARGETPLATFORM=$1
 
-# Determine the correct binary file for the architecture given
+# 根据目标平台选择 Go 交叉编译参数。
 case $TARGETPLATFORM in
 	linux/arm64)
-		ARCH=arm64
+		GOARCH=arm64
+		;;
+
+	linux/arm/v7)
+		GOARCH=arm
+		GOARM=7
 		;;
 
 	*)
-		ARCH=amd64
+		GOARCH=amd64
 		;;
 esac
 
-echo -e "${BLUE}❯ ${CYAN}Installing cert-prune v${CERT_PRUNE_VERSION} for ${YELLOW}${TARGETPLATFORM} (${ARCH})${RESET}"
+echo -e "${BLUE}❯ ${CYAN}Installing cert-prune ${YELLOW}${CERT_PRUNE_VERSION} ${CYAN}for ${YELLOW}${TARGETPLATFORM} (${GOARCH})${RESET}"
 
-mkdir -p /tmp/cert-prune
-cd /tmp/cert-prune
-curl -L -o 'cert-prune.tar.gz' "https://github.com/axllent/cert-prune/releases/download/${CERT_PRUNE_VERSION}/cert-prune-linux-${ARCH}.tar.gz"
-tar -xzf 'cert-prune.tar.gz'
-mv cert-prune /bin/
-rm -rf /tmp/cert-prune
+export CGO_ENABLED=0
+export GOOS=linux
+export GOARCH
+export GOARM=${GOARM:-}
+export GOPROXY=https://proxy.golang.org,direct
+export GOPATH=/tmp/cert-prune-go
+
+go install "github.com/axllent/cert-prune@${CERT_PRUNE_VERSION}"
+BIN_PATH="${GOPATH}/bin/cert-prune"
+ALT_BIN_PATH="${GOPATH}/bin/${GOOS}_${GOARCH}/cert-prune"
+
+if [ -f "${ALT_BIN_PATH}" ]; then
+	BIN_PATH="${ALT_BIN_PATH}"
+fi
+
+install -m 0755 "${BIN_PATH}" /usr/local/bin/cert-prune
+rm -rf "${GOPATH}"
 
 echo -e "${BLUE}❯ ${GREEN}cert-prune install Complete${RESET}"
