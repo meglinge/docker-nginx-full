@@ -6,13 +6,21 @@ YELLOW='\E[1;33m'
 GREEN='\E[1;32m'
 RESET='\E[0m'
 
-REGISTRY=${REGISTRY:-}
-DOCKER_IMAGE="${REGISTRY}nginxproxymanager/nginx-full"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_IMAGE="nginxproxymanager/nginx-full"
 
-export OPENRESTY_VERSION=1.27.1.2
-export CROWDSEC_OPENRESTY_BOUNCER_VERSION=0.1.7
-export LUA_VERSION=5.1.5
-export LUAROCKS_VERSION=3.3.1
+set -a
+source "${DIR}/docker/build.env"
+set +a
+
+if [ -n "${DOCKER_IMAGE:-}" ]; then
+	DOCKER_IMAGE="${DOCKER_IMAGE}"
+elif [ -n "${REGISTRY:-}" ]; then
+	DOCKER_IMAGE="${REGISTRY%/}/${DEFAULT_IMAGE}"
+else
+	DOCKER_IMAGE="${DEFAULT_IMAGE}"
+fi
+cd "${DIR}"
 
 export BASE_IMAGE="${DOCKER_IMAGE}:latest"
 export ACMESH_IMAGE="${DOCKER_IMAGE}:acmesh"

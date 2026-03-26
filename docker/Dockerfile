@@ -12,6 +12,7 @@ RUN apt-get update \
 	&& apt-get install -y \
 	build-essential \
 	ca-certificates \
+	cmake \
 	libncurses-dev \
 	libpcre3-dev \
 	libreadline-dev \

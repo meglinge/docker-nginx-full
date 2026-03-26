@@ -1,0 +1,235 @@
+name: 发布 GHCR 镜像
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-ghcr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: 构建并发布镜像
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v5
+
+      - name: 载入构建参数
+        id: vars
+        shell: bash
+        run: |
+          set -a
+          source docker/build.env
+          set +a
+          {
+            echo "image_name=ghcr.io/${GITHUB_REPOSITORY,,}"
+            echo "openresty_version=${OPENRESTY_VERSION}"
+            echo "crowdsec_openresty_bouncer_version=${CROWDSEC_OPENRESTY_BOUNCER_VERSION}"
+            echo "lua_version=${LUA_VERSION}"
+            echo "luarocks_version=${LUAROCKS_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 设置 QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: 设置 Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 生成 latest 标签
+        id: meta_latest
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.vars.outputs.image_name }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,prefix=sha-
+
+      - name: 构建 latest 镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          pull: true
+          push: true
+          tags: ${{ steps.meta_latest.outputs.tags }}
+          labels: ${{ steps.meta_latest.outputs.labels }}
+          cache-from: type=gha,scope=latest
+          cache-to: type=gha,mode=max,scope=latest
+          build-args: |
+            OPENRESTY_VERSION=${{ steps.vars.outputs.openresty_version }}
+            CROWDSEC_OPENRESTY_BOUNCER_VERSION=${{ steps.vars.outputs.crowdsec_openresty_bouncer_version }}
+            LUA_VERSION=${{ steps.vars.outputs.lua_version }}
+            LUAROCKS_VERSION=${{ steps.vars.outputs.luarocks_version }}
+
+      - name: 等待 latest 镜像可用
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ steps.vars.outputs.image_name }}
+          IMAGE_TAG: ${{ steps.meta_latest.outputs.version }}
+        run: |
+          for i in {1..12}; do
+            if docker buildx imagetools inspect "${IMAGE_NAME}:${IMAGE_TAG}" >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "latest 镜像未在 GHCR 中按时可用" >&2
+          exit 1
+
+      - name: 生成 acmesh 标签
+        id: meta_acmesh
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.vars.outputs.image_name }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=acmesh,enable={{is_default_branch}}
+            type=ref,event=tag,suffix=-acmesh
+            type=sha,prefix=sha-,suffix=-acmesh
+
+      - name: 构建 acmesh 镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.acmesh
+          platforms: linux/amd64,linux/arm64
+          pull: true
+          push: true
+          tags: ${{ steps.meta_acmesh.outputs.tags }}
+          labels: ${{ steps.meta_acmesh.outputs.labels }}
+          cache-from: type=gha,scope=acmesh
+          cache-to: type=gha,mode=max,scope=acmesh
+          build-args: |
+            BASE_IMAGE=${{ steps.vars.outputs.image_name }}:${{ steps.meta_latest.outputs.version }}
+
+      - name: 等待 acmesh 镜像可用
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ steps.vars.outputs.image_name }}
+          IMAGE_TAG: ${{ steps.meta_acmesh.outputs.version }}
+        run: |
+          for i in {1..12}; do
+            if docker buildx imagetools inspect "${IMAGE_NAME}:${IMAGE_TAG}" >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "acmesh 镜像未在 GHCR 中按时可用" >&2
+          exit 1
+
+      - name: 生成 certbot 标签
+        id: meta_certbot
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.vars.outputs.image_name }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=certbot,enable={{is_default_branch}}
+            type=ref,event=tag,suffix=-certbot
+            type=sha,prefix=sha-,suffix=-certbot
+
+      - name: 构建 certbot 镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.certbot
+          platforms: linux/amd64,linux/arm64
+          pull: true
+          push: true
+          tags: ${{ steps.meta_certbot.outputs.tags }}
+          labels: ${{ steps.meta_certbot.outputs.labels }}
+          cache-from: type=gha,scope=certbot
+          cache-to: type=gha,mode=max,scope=certbot
+          build-args: |
+            BASE_IMAGE=${{ steps.vars.outputs.image_name }}:${{ steps.meta_latest.outputs.version }}
+
+      - name: 等待 certbot 镜像可用
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ steps.vars.outputs.image_name }}
+          IMAGE_TAG: ${{ steps.meta_certbot.outputs.version }}
+        run: |
+          for i in {1..12}; do
+            if docker buildx imagetools inspect "${IMAGE_NAME}:${IMAGE_TAG}" >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "certbot 镜像未在 GHCR 中按时可用" >&2
+          exit 1
+
+      - name: 生成 acmesh-golang 标签
+        id: meta_acmesh_golang
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.vars.outputs.image_name }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=acmesh-golang,enable={{is_default_branch}}
+            type=ref,event=tag,suffix=-acmesh-golang
+            type=sha,prefix=sha-,suffix=-acmesh-golang
+
+      - name: 构建 acmesh-golang 镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.acmesh-golang
+          platforms: linux/amd64,linux/arm64
+          pull: true
+          push: true
+          tags: ${{ steps.meta_acmesh_golang.outputs.tags }}
+          labels: ${{ steps.meta_acmesh_golang.outputs.labels }}
+          cache-from: type=gha,scope=acmesh-golang
+          cache-to: type=gha,mode=max,scope=acmesh-golang
+          build-args: |
+            ACMESH_IMAGE=${{ steps.vars.outputs.image_name }}:${{ steps.meta_acmesh.outputs.version }}
+
+      - name: 生成 certbot-node 标签
+        id: meta_certbot_node
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.vars.outputs.image_name }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=certbot-node,enable={{is_default_branch}}
+            type=ref,event=tag,suffix=-certbot-node
+            type=sha,prefix=sha-,suffix=-certbot-node
+
+      - name: 构建 certbot-node 镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.certbot-node
+          platforms: linux/amd64,linux/arm64
+          pull: true
+          push: true
+          tags: ${{ steps.meta_certbot_node.outputs.tags }}
+          labels: ${{ steps.meta_certbot_node.outputs.labels }}
+          cache-from: type=gha,scope=certbot-node
+          cache-to: type=gha,mode=max,scope=certbot-node
+          build-args: |
+            CERTBOT_IMAGE=${{ steps.vars.outputs.image_name }}:${{ steps.meta_certbot.outputs.version }}
