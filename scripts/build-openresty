@@ -14,8 +14,8 @@ tar -xzf openresty-${OPENRESTY_VERSION}.tar.gz
 mv /tmp/openresty-${OPENRESTY_VERSION} /tmp/openresty
 git clone https://github.com/leev/ngx_http_geoip2_module.git
 mv /tmp/ngx_http_geoip2_module /tmp/openresty/ngx_http_geoip2_module
-git clone --recurse-submodules https://github.com/google/ngx_brotli.git
-cd /tmp/ngx_brotli/deps/brotli
+git clone --recurse-submodules https://github.com/google/ngx_brotli.git /tmp/openresty/ngx_brotli
+cd /tmp/openresty/ngx_brotli/deps/brotli
 mkdir -p out
 cd out
 cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=./installed ..
@@ -63,7 +63,7 @@ cd /tmp/openresty
 	--with-stream_ssl_preread_module \
 	--with-http_v3_module \
 	--add-dynamic-module=/tmp/openresty/ngx_http_geoip2_module \
-	--add-module=/tmp/ngx_brotli
+	--add-module=/tmp/openresty/ngx_brotli
 
 make -j2
 
